@@ -16,12 +16,39 @@ def get_db():
 
 db = get_db()
 
+# Словник складу платформ (згідно з твоїми даними)
+platform_details = {
+    "10 дюймів": [
+        "Мотори 3115 900kv (4 шт) — 4000 грн",
+        "Рама Mark4 10 — 1100 грн",
+        "Пропелери (4 шт) — 500 грн",
+        "Польотник F405 + ESC — 2600 грн",
+        "Батарея 6s3p — 4000 грн",
+        "Стрепи (2 шт) — 40 грн"
+    ],
+    "13 дюймів": [
+        "Мотори 4320 640kv (4 шт) — 9600 грн",
+        "Рама Mark4 13 — 2100 грн",
+        "Пропелери (4 шт) — 1000 грн",
+        "Польотник F405 + ESC — 4000 грн",
+        "Батарея 8s3p — 5400 грн",
+        "Стрепи (2 шт) — 40 грн"
+    ],
+    "15 дюймів": [
+        "Мотори 4320 380kv (4 шт) — 9600 грн",
+        "Рама Mark4 15 — 3400 грн",
+        "Пропелери (4 шт) — 1300 грн",
+        "Польотник F405 + ESC — 4000 грн",
+        "Батарея 8s4p — 7500 грн",
+        "Стрепи (2 шт) — 40 грн"
+    ]
+}
+
 st.title("🚁 Drone Configurator Pro")
 st.markdown("---")
 
 if db:
     try:
-        # 1. Завантаження даних з Supabase
         p_res = db.table("platforms").select("*").execute()
         c_res = db.table("components").select("*").execute()
         
@@ -33,51 +60,39 @@ if db:
             
             with col1:
                 st.subheader("📍 Крок 1: База та Роль")
-                # Вибір Платформи
                 p_names = [p['name'] for p in platforms]
                 sel_p_name = st.selectbox("Оберіть платформу", p_names)
                 sel_p = next(p for p in platforms if p['name'] == sel_p_name)
                 
-                # Логіка ролей: прибираємо розвідку для 10, 13, 15 дюймів
+                # Деталізація складу платформи
+                with st.expander(f"🔍 Що входить у базу {sel_p_name}?"):
+                    for item in platform_details.get(sel_p_name, []):
+                        st.write(f"• {item}")
+
                 available_roles = [r for r in sel_p['allowed_roles'] if r != "Розвідник"]
                 sel_role = st.selectbox("Оберіть роль борту", available_roles)
                 
-                # Автоматичне нарахування за спецобладнання (Спецуха)
-                spec_price = 0
-                spec_name = ""
-                if sel_role == "Камікадзе":
-                    spec_price = 1200
-                    spec_name = "Плата ініціації"
-                elif sel_role == "Бомбер":
-                    spec_price = 2000
-                    spec_name = "Система скиду + поворотка"
-
-                st.info(f"⚙️ **Обладнання за роллю:** {spec_name} (+{spec_price} грн)")
+                spec_price = 1200 if sel_role == "Камікадзе" else 2000
+                spec_name = "Плата ініціації" if sel_role == "Камікадзе" else "Система скиду + поворотка"
+                st.info(f"⚙️ **Обладнання:** {spec_name} (+{spec_price} грн)")
+                
                 st.divider()
-
                 st.subheader("🔧 Крок 2: Комплектація")
                 
-                # 1. Керування (Виправлено пошук ціни)
+                # Керування
                 ctrl_items = [c for c in all_components if c['category'] == 'Керування']
-                ctrl_opts = [f"{c['name']} (+{c['price_uah']} грн)" for c in ctrl_items]
-                sel_ctrl_raw = st.selectbox("📡 Система керування", ctrl_opts)
-                # Точний пошук по назві без ціни
-                chosen_ctrl_name = sel_ctrl_raw.split(" (+")[0]
-                sel_ctrl = next(c for c in ctrl_items if c['name'] == chosen_ctrl_name)
+                sel_ctrl_raw = st.selectbox("📡 Система керування", [f"{c['name']} (+{c['price_uah']} грн)" for c in ctrl_items])
+                sel_ctrl = next(c for c in ctrl_items if c['name'] == sel_ctrl_raw.split(" (+")[0])
 
-                # 2. Відеосистема (Виправлено пошук ціни)
+                # Відеосистема
                 video_items = [c for c in all_components if c['category'] == 'Відео']
-                video_opts = [f"{c['name']} (+{c['price_uah']} грн)" for c in video_items]
-                sel_video_raw = st.selectbox("📺 Відеосистема", video_opts)
-                # Точний пошук по назві без ціни
-                chosen_video_name = sel_video_raw.split(" (+")[0]
-                sel_video = next(c for c in video_items if c['name'] == chosen_video_name)
+                sel_video_raw = st.selectbox("📺 Відеосистема", [f"{c['name']} (+{c['price_uah']} грн)" for c in video_items])
+                sel_video = next(c for c in video_items if c['name'] == sel_video_raw.split(" (+")[0])
 
-                # 3. Антена (Автоматична привязка по частоті)
+                # Авто-антена
                 antenna_price = 0
-                sel_antenna_name = "Не потрібна / В комплекті"
+                sel_antenna_name = "В комплекті"
                 if sel_video['system_type'] == 'Analog':
-                    # Витягуємо частоту з назви відео (наприклад "1.2-1.3Ghz")
                     v_freq = sel_video['name'].split(' ')[0] 
                     antennas = [c for c in all_components if c['category'] == 'Антени' and v_freq in c['name']]
                     if antennas:
@@ -85,67 +100,40 @@ if db:
                         antenna_price = float(sel_antenna['price_uah'])
                         sel_antenna_name = sel_antenna['name']
                         st.success(f"📡 Антена (авто): {sel_antenna_name} (+{antenna_price} грн)")
-                    else:
-                        st.warning("⚠️ Відповідну антену не знайдено в базі")
-                else:
-                    st.write("📡 Антена входить у вартість цифри")
 
-                # 4. Камера (Тільки для аналогового відео)
+                # Камера
                 camera_price = 0
-                camera_name = "Вбудована (Цифра)"
+                camera_name = "Вбудована"
                 if sel_video['system_type'] == 'Analog':
                     cam_items = [c for c in all_components if c['category'] == 'Камери']
-                    cam_opts = [f"{c['name']} (+{c['price_uah']} грн)" for c in cam_items]
-                    sel_cam_raw = st.selectbox("📷 Оберіть камеру", cam_opts)
-                    chosen_cam_name = sel_cam_raw.split(" (+")[0]
-                    sel_cam = next(c for c in cam_items if c['name'] == chosen_cam_name)
+                    sel_cam_raw = st.selectbox("📷 Оберіть камеру", [f"{c['name']} (+{c['price_uah']} грн)" for c in cam_items])
+                    sel_cam = next(c for c in cam_items if c['name'] == sel_cam_raw.split(" (+")[0])
                     camera_price = float(sel_cam['price_uah'])
                     camera_name = sel_cam['name']
-                else:
-                    st.info("📷 Камера вже є в цифровому модулі")
 
             with col2:
                 st.subheader("📊 Підсумок конфігурації")
-                
                 base_p = float(sel_p['base_price'])
-                ctrl_p = float(sel_ctrl['price_uah'])
-                video_p = float(sel_video['price_uah'])
+                total = base_p + spec_price + float(sel_ctrl['price_uah']) + float(sel_video['price_uah']) + antenna_price + camera_price
                 
-                total = base_p + spec_price + ctrl_p + video_p + antenna_price + camera_price
-                
-                # Деталізація чека
                 st.write(f"**База {sel_p_name}:** {base_p:,.0f} грн")
-                st.write(f"**Роль {sel_role}:** {spec_price:,.0f} грн")
-                st.write(f"**Керування ({sel_ctrl['name']}):** {ctrl_p:,.0f} грн")
-                st.write(f"**Відео ({sel_video['name']}):** {video_p:,.0f} грн")
-                if antenna_price > 0:
-                    st.write(f"**Антена ({sel_antenna_name}):** {antenna_price:,.0f} грн")
-                if camera_price > 0:
-                    st.write(f"**Камера ({camera_name}):** {camera_price:,.0f} грн")
+                st.write(f"**Обладнання ({sel_role}):** {spec_price:,.0f} грн")
+                st.write(f"**Керування:** {sel_ctrl['name']} ({sel_ctrl['price_uah']} грн)")
+                st.write(f"**Відео:** {sel_video['name']} ({sel_video['price_uah']} грн)")
+                if antenna_price > 0: st.write(f"**Антена:** {sel_antenna_name} ({antenna_price} грн)")
+                if camera_price > 0: st.write(f"**Камера:** {camera_name} ({camera_price} грн)")
                 
                 st.divider()
-                st.header(f"💵 Загальна вартість: {total:,.2f} грн")
+                st.header(f"💵 Разом: {total:,.2f} грн")
                 
                 if st.button("📄 Сформувати короткий звіт"):
-                    text_report = f"""ЗБІРКА: {sel_p_name} ({sel_role})
----
-База: {base_p} грн
-Керування: {sel_ctrl['name']}
-Відео: {sel_video['name']}
-Антена: {sel_antenna_name}
-Камера: {camera_name}
----
-РАЗОМ: {total} грн"""
-                    st.code(text_report)
+                    report = f"ЗБІРКА: {sel_p_name} ({sel_role})\nБаза: {base_p} грн\nКерування: {sel_ctrl['name']}\nВідео: {sel_video['name']}\nРАЗОМ: {total} грн"
+                    st.code(report)
 
     except Exception as e:
-        st.error(f"Виникла помилка при розрахунку: {e}")
+        st.error(f"Помилка: {e}")
 
-# Бічна панель
 with st.sidebar:
-    st.write("📊 **Статистика бази**")
-    if 'platforms' in locals(): st.write(f"Платформ: {len(platforms)}")
-    st.divider()
-    if st.button("🔄 Оновити дані з Supabase"):
+    if st.button("🔄 Оновити дані"):
         st.cache_resource.clear()
         st.rerun()
